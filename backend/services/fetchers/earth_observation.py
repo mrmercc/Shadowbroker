@@ -1383,9 +1383,20 @@ def _build_uap_sightings_from_hf_mirror() -> list[dict]:
     This is a resilience fallback for local/Windows runs where nuforc.org is
     Cloudflare-gated and the Mapbox token is not configured. It is not as fresh
     as the live NUFORC AJAX feed, but it keeps the layer visible and cached.
+
+    Date-cutoff guard: the kcimc/NUFORC HF dataset is a static snapshot whose
+    maintainer refreshes it sporadically. Without a cutoff, sorting by
+    occurred-desc and taking the top N rows returns whatever the mirror's
+    newest rows happen to be — which can be years old if the snapshot is
+    stale. We apply the same ``_NUFORC_RECENT_DAYS`` window the live path
+    uses (60 days). If the HF mirror has nothing inside the window we return
+    ``[]`` rather than silently serving 3-year-old "newest" rows.
     """
     from services.fetchers.nuforc_enrichment import _HF_CSV_URL, _parse_date
     from services.geocode_validate import coord_in_country
+
+    cutoff_dt = datetime.utcnow() - timedelta(days=_NUFORC_RECENT_DAYS)
+    cutoff_str = cutoff_dt.strftime("%Y-%m-%d")
 
     try:
         response = fetch_with_curl(_HF_CSV_URL, timeout=180, follow_redirects=True)
@@ -1400,6 +1411,7 @@ def _build_uap_sightings_from_hf_mirror() -> list[dict]:
         return []
 
     candidates: list[dict] = []
+    stale_rows_dropped = 0
     try:
         reader = csv.DictReader(io.StringIO(response.text))
         for row in reader:
@@ -1409,6 +1421,9 @@ def _build_uap_sightings_from_hf_mirror() -> list[dict]:
                 or row.get("Date", "")
             )
             if not occurred:
+                continue
+            if occurred < cutoff_str:
+                stale_rows_dropped += 1
                 continue
             raw_location = _normalize_uap_location(
                 row.get("Location", "")
@@ -1442,6 +1457,19 @@ def _build_uap_sightings_from_hf_mirror() -> list[dict]:
             })
     except Exception as e:
         logger.warning("UAP sightings: HF fallback parse failed: %s", e)
+        return []
+
+    if not candidates:
+        # HF mirror returned rows, but none inside the rolling window. This is
+        # the smoking gun for "the public HF dataset hasn't been refreshed in
+        # years" — log loudly so the operator sees it instead of guessing.
+        logger.error(
+            "UAP sightings: HF fallback yielded 0 rows within last %d days "
+            "(dropped %d stale rows). HF mirror is likely stale; the layer "
+            "will be empty until the live NUFORC path recovers.",
+            _NUFORC_RECENT_DAYS,
+            stale_rows_dropped,
+        )
         return []
 
     candidates.sort(key=lambda row: (row["occurred"], row["posted"], row["id"]), reverse=True)
@@ -1515,13 +1543,29 @@ def fetch_uap_sightings(*, force_refresh: bool = False):
 
     sightings = _load_nuforc_sightings_cache(force_refresh=force_refresh)
     if sightings is None:
+        live_error: Exception | None = None
         try:
             sightings = _build_recent_uap_sightings()
         except Exception as e:
+            live_error = e
             logger.warning("UAP sightings: live NUFORC rebuild failed, using fallback: %s", e)
             sightings = _build_uap_sightings_from_hf_mirror()
         if sightings:
             _save_nuforc_sightings_cache(sightings)
+        elif live_error is not None:
+            # Both paths failed: live raised AND HF fallback returned empty
+            # (either the HF mirror is stale beyond the cutoff or the network
+            # is gone entirely). The previous code silently set the layer to
+            # ``[]`` and kept marking it fresh; that masked the failure for
+            # days. Surface it via assert_canary so the health registry shows
+            # the layer as broken instead of "fresh and empty".
+            from services.slo import assert_canary
+            assert_canary("uap_sightings", 0)
+            logger.error(
+                "UAP sightings: both live NUFORC and HF fallback produced 0 "
+                "rows; layer is unavailable. Live error: %s",
+                live_error,
+            )
 
     with _data_lock:
         latest_data["uap_sightings"] = sightings or []
