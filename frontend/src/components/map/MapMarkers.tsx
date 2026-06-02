@@ -387,7 +387,7 @@ export function ThreatMarkers({
                   borderRadius: '4px',
                   padding: '8px 20px 8px 12px',
                   color: riskColor,
-                  fontFamily: "'JetBrains Mono', monospace",
+                  fontFamily: 'var(--font-jetbrains-mono), monospace',
                   fontSize: '12px',
                   fontWeight: 'bold',
                   textAlign: 'center',

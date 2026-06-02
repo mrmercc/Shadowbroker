@@ -19,7 +19,7 @@
 
 **ShadowBroker** is a decentralized intelligence platform that aggregates real-time, multi-domain OSINT telemetry from 60+ live intelligence feeds into a single dark-ops map interface. Aircraft, ships, satellites, conflict zones, CCTV networks, GPS jamming, internet-connected devices, police scanners, mesh radio nodes, and breaking geopolitical events — all updating in real time on one screen as well as an obfuscated communications protocol and information exchange infrastructure.
 
-Built with **Next.js**, **MapLibre GL**, **FastAPI**, and **Python**. 35+ toggleable data layers, including SAR ground-change detection. Multiple visual modes (DEFAULT / SATELLITE / FLIR / NVG / CRT). Right-click any point on Earth for a country dossier, head-of-state lookup, and the latest Sentinel-2 satellite photo. No user data is collected or transmitted — the dashboard runs entirely in your browser against a self-hosted backend.
+Built with **Next.js**, **MapLibre GL**, **FastAPI**, and **Python**. 35+ toggleable data layers, including SAR ground-change detection. Multiple visual modes (DEFAULT / SATELLITE / FLIR / NVG / CRT). Right-click any point on Earth for a country dossier, head-of-state lookup, and the latest Sentinel-2 satellite photo. ShadowBroker has no accounts, product telemetry, or analytics; the dashboard talks to your self-hosted backend, while optional live OSINT panels may contact their configured public data providers when you use them.
 
 Designed for analysts, researchers, radio operators, and anyone who wants to see what the world looks like when every public signal is on the same map.
 
@@ -28,7 +28,7 @@ Designed for analysts, researchers, radio operators, and anyone who wants to see
 
 A surprising amount of global telemetry is already public — aircraft ADS-B broadcasts, maritime AIS signals, satellite orbital data, earthquake sensors, mesh radio networks, police scanner feeds, environmental monitoring stations, internet infrastructure telemetry, and more. This data is scattered across dozens of tools and APIs. ShadowBroker combines all of it into a single interface.
 
-The project does not introduce new surveillance capabilities — it aggregates and visualizes existing public datasets. It is fully open-source so anyone can audit exactly what data is accessed and how. No user data is collected or transmitted — everything runs locally against a self-hosted backend. No telemetry, no analytics, no accounts.
+The project does not introduce new surveillance capabilities — it aggregates and visualizes existing public datasets. It is fully open-source so anyone can audit exactly what data is accessed and how. ShadowBroker does not include product telemetry, analytics, or accounts. Operator-supplied keys stay in your local deployment, but live OSINT features necessarily make outbound requests to the public data providers you enable or query.
 
 ### Shodan Connector
 
@@ -112,6 +112,20 @@ That's it. `pull` grabs the latest images, `up -d` restarts the containers.
 > ```
 >
 > Podman users should run the equivalent provider command, for example `podman-compose pull` and `podman-compose up -d`, or use `./compose.sh --engine podman pull` and `./compose.sh --engine podman up -d` from a bash-compatible shell.
+
+### Update Integrity
+
+Docker updates are delivered through signed container registries. The legacy ZIP self-updater verifies release archives through this chain, in order:
+
+* `MESH_UPDATE_SHA256` when an operator pins a digest explicitly.
+* `backend/data/release_digests.json` for bundled release pins.
+* The release `SHA256SUMS.txt` asset on GitHub when a bundled pin is not present.
+
+Release maintainers should run `python backend/scripts/release_helper.py hash <ShadowBroker_vX.Y.Z.zip>` before publishing, then publish `SHA256SUMS.txt` and update `backend/data/release_digests.json` when shipping a ZIP updater target. The updater keeps the operator override path intact instead of failing closed on missing bundled digests, so existing installs do not get stranded by a release-process mistake.
+
+### CSP Hardening
+
+The production frontend ships with a hydration-compatible CSP and a strict nonce-only CSP in `Content-Security-Policy-Report-Only`. Set `SHADOWBROKER_STRICT_CSP=1` only after verifying the exact build hydrates correctly in your deployment. Runtime Google Fonts are not required; the bundled Next font pipeline serves the dashboard font from the app build.
 
 ### ⚠️ **Stuck on the old version?**
 
@@ -219,7 +233,7 @@ The first decentralized intelligence communication and governance layer built di
 
 **Privacy primitive runway (NEW in v0.9.7):**
 
-* **Function Keys — Anonymous Citizenship Proof** — A citizen proves "I am an Infonet citizen" without revealing their Infonet identity. 5 of 6 pieces shipped: nullifiers, challenge-response, two-phase commit receipts, enumerated denial codes, batched settlement. Issuance via blind signatures waits on a primitive decision (RSA blind sigs vs BBS+ vs U-Prove vs Idemix).
+* **Function Keys — Anonymous Credential Scaffolding** — The plumbing is in place for nullifiers, challenge-response, two-phase commit receipts, enumerated denial codes, and batched settlement. Today's challenge-response is an HMAC-based placeholder for integration testing, not a production anonymous or zero-knowledge citizenship proof. True unlinkable issuance still waits on a primitive decision (RSA blind sigs vs BBS+ vs U-Prove vs Idemix).
 * **Locked Protocol Contracts** — Stable interfaces in `services/infonet/privacy/contracts.py` for ring signatures, stealth addresses, Pedersen commitments, range proofs, and DEX matching. The `privacy-core` Rust crate is the integration target — no caller of the privacy module needs to know which scheme is active.
 * **Sprint 11+ Path** — When the cryptographic scheme is chosen, primitives wire into the locked Protocols without API churn.
 
