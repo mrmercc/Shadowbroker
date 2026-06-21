@@ -84,8 +84,8 @@ ShadowBroker includes an optional **Shodan connector** for operator-supplied API
 
 ---
 
-<details>
-<summary>⚡ Quick Start (Docker)</summary>
+
+⚡ Quick Start (Docker)</summary>
 
 ### From GitHub (default — uses GHCR images)
 
@@ -117,7 +117,7 @@ Open `http://localhost:3000` to view the dashboard! *(Requires [Docker Desktop](
 
 > **Podman users:** Podman works, but `podman compose` is a wrapper and still needs a Compose provider installed. On Windows/WSL, if you see `looking up compose provider failed`, install `podman-compose` and run `podman-compose pull` followed by `podman-compose up -d` from inside the cloned `Shadowbroker` folder. On Linux/macOS/WSL shells you can also use `./compose.sh --engine podman pull` and `./compose.sh --engine podman up -d`.
 
-</details>
+
 
 ---
 
